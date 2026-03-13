@@ -26,13 +26,13 @@ import {
   addReceiverToPayment,
   cancelPaymentRequest,
   confirmPaymentRequest,
-  getBscScanUrlForAddress,
+  getHelaScanUrlForAddress,
   getReceiverUserFromUncompletedPaymentRequest,
   getRecipientAddressFromUncompletedPaymentRequest,
   isReceiverInputPending,
   isUserAwaitingAmountInput,
   makePaymentRequest,
-  sendUsdtFromWallet,
+  sendHlusdFromWallet,
   updatePaymentRequestToError,
 } from '../../lib/crypto/transaction'
 import { transformStringToNumber } from '../../lib/utils/number'
@@ -111,14 +111,14 @@ const handler: VercelApiHandler = async (
                 })
                 await sendSimpleButtonsMessage(
                   recipientPhone,
-                  `How many USDT would you like to send to ${validatedReceiver}?`,
+                  `How many HLUSD would you like to send to ${validatedReceiver}?`,
                   [{ title: 'Cancel transaction', id: 'cancel_send_money' }],
                 )
                 return
               } catch (error) {
                 await sendSimpleButtonsMessage(
                   recipientPhone,
-                  `The value is not valid. Make sure it matches a wallet address format or that the phone number has a Cryptosapp account.\n ${error}`,
+                  `The value is not valid. Make sure it matches a wallet address format or that the phone number has a CryptoX account.\n ${error}`,
                   [{ title: 'Cancel transaction', id: 'cancel_send_money' }],
                 )
               }
@@ -147,7 +147,7 @@ const handler: VercelApiHandler = async (
                   recipientPhone,
                 )
 
-                await sendUsdtFromWallet({
+                await sendHlusdFromWallet({
                   tokenAmount: amount,
                   privateKey: senderPrivateKey,
                   toAddress:
@@ -168,14 +168,13 @@ const handler: VercelApiHandler = async (
                 if (receiverUser) {
                   await sendMessageToPhoneNumber(
                     receiverUser.phoneNumer,
-                    `You received ${amount} USDT from ${user.name} 🌟`,
+                    `You received ${amount} HLUSD from ${user.name} 🌟`,
                   )
                   await sendMenuButtonsTo(receiverUser.phoneNumer)
                 }
 
-                const bscScanUrl = getBscScanUrlForAddress(address)
-
-                await sendMessageToPhoneNumber(recipientPhone, bscScanUrl)
+                const helaScanUrl = getHelaScanUrlForAddress(address)
+                await sendMessageToPhoneNumber(recipientPhone, helaScanUrl)
               } catch (error) {
                 await updatePaymentRequestToError(user.id)
 
@@ -205,7 +204,7 @@ const handler: VercelApiHandler = async (
             )
             await sendMessageToPhoneNumber(
               recipientPhone,
-              `I'm your favorite crypto-bot 🤖.\nYour safest, most reliable, and easiest digital wallet service.`,
+              `I'm your favorite crypto-bot 🤖.\nYour safest, most reliable, and easiest digital wallet service on Hela Chain.`,
             )
             await sendSimpleButtonsMessage(
               recipientPhone,
@@ -244,12 +243,7 @@ const handler: VercelApiHandler = async (
               await sendSimpleButtonsMessage(
                 recipientPhone,
                 `Enter the recipient's phone number or wallet address`,
-                [
-                  {
-                    title: 'Cancel',
-                    id: 'cancel_send_money',
-                  },
-                ],
+                [{ title: 'Cancel', id: 'cancel_send_money' }],
               )
 
               break
@@ -257,21 +251,12 @@ const handler: VercelApiHandler = async (
             case 'check_balance': {
               await sendMessageToPhoneNumber(recipientPhone, 'Loading ⏳')
 
-              const privateKey = await getPrivateKeyByPhoneNumber(
-                recipientPhone,
-              )
-
-              const { bnbBalance, usdtBalance } = await getAccountBalances(
-                privateKey,
-              )
+              const privateKey = await getPrivateKeyByPhoneNumber(recipientPhone)
+              const { hlusdBalance } = await getAccountBalances(privateKey)
 
               await sendMessageToPhoneNumber(
                 recipientPhone,
-                `${bnbBalance} BNB`,
-              )
-              await sendMessageToPhoneNumber(
-                recipientPhone,
-                `${usdtBalance} USDT`,
+                `${hlusdBalance} HLUSD`,
               )
               await sendMenuButtons()
               break
@@ -286,7 +271,7 @@ const handler: VercelApiHandler = async (
               await sendMessageToPhoneNumber(recipientPhone, address)
               await sendMessageToPhoneNumber(
                 recipientPhone,
-                '(Send USDT or BNB via the Binance Smart Chain network)',
+                '(Send HLUSD via the Hela Chain network)',
               )
               await sendMenuButtons()
               break
@@ -311,28 +296,26 @@ const handler: VercelApiHandler = async (
               ])
 
               await sendMenuButtons()
-
               break
             }
             case 'info_address': {
               await sendSimpleButtonsMessage(
                 recipientPhone,
-                'An address is like a bank account number you can use to receive money from others. This wallet uses the Binance Smart Chain network and supports the USDT cryptocurrency. You will need BNB to make transfers.',
-                [{ title: 'What is BNB?', id: 'info_bnb' }],
+                'An address is like a bank account number you can use to receive money from others. This wallet runs on Hela Chain and uses HLUSD as its native currency.',
+                [{ title: 'What is HLUSD?', id: 'info_hlusd' }],
               )
 
               await sendMenuButtons()
-
               break
             }
-            case 'info_bnb':
+            case 'info_hlusd':
               await sendMessageToPhoneNumber(
                 recipientPhone,
-                'BNB is the fuel that powers the blockchain network.',
+                'HLUSD is the native currency of Hela Chain — used for sending payments and paying transaction fees on the network.',
               )
               await sendMessageToPhoneNumber(
                 recipientPhone,
-                'For more information, check out this link:\nhttps://academy.binance.com/en/articles/what-is-bnb',
+                'For more information, visit:\nhttps://helachain.com',
               )
               await sendMenuButtons()
               break
@@ -345,7 +328,6 @@ const handler: VercelApiHandler = async (
                 recipientPhone,
                 'Transaction cancelled.',
               )
-
               await sendMenuButtons()
               break
             default:

@@ -1,52 +1,31 @@
 import crypto from 'crypto'
-
 import { ethers } from 'ethers'
 
-import usdtBEP20 from './abis/usdtBEP20.json'
+const rpcUrl = process.env.HELA_RPC_URL
 
-const quickNodeUrl = process.env.QUICK_NODE_URL
-
-if (!quickNodeUrl) {
-  throw new Error('QUICK_NODE_URL is not defined')
+if (!rpcUrl) {
+  throw new Error('HELA_RPC_URL is not defined')
 }
-
-export const bscUsdtContractAddress =
-  '0x55d398326f99059ff775485246999027b3197955'
 
 type Numberish = number | bigint
 
 /**
  * helper function to remove 18 decimals from a number
- * @param number
- * @returns
  */
 function removeDecimals(number: Numberish): number {
   return Number(number) / 10 ** 18
 }
 
 export async function getAccountBalances(privateKey: string): Promise<{
-  bnbBalance: number
-  usdtBalance: number
+  hlusdBalance: number
 }> {
-  const provider = new ethers.JsonRpcProvider(quickNodeUrl)
-
+  const provider = new ethers.JsonRpcProvider(rpcUrl)
   const wallet = new ethers.Wallet(privateKey)
 
-  const walletSigner = wallet.connect(provider)
-
-  const usdtContract = new ethers.Contract(
-    bscUsdtContractAddress,
-    usdtBEP20,
-    walletSigner,
-  )
-
-  const bnbBalance = await provider.getBalance(wallet.address, 'latest')
-
-  const usdtBalance = await usdtContract.balanceOf(wallet.address)
+  const hlusdBalance = await provider.getBalance(wallet.address, 'latest')
 
   return {
-    bnbBalance: removeDecimals(bnbBalance),
-    usdtBalance: removeDecimals(usdtBalance),
+    hlusdBalance: removeDecimals(hlusdBalance),
   }
 }
 

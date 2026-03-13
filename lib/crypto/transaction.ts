@@ -1,8 +1,5 @@
 import { ethers } from 'ethers'
 
-import { bscUsdtContractAddress } from '.'
-import usdtBEP20 from './abis/usdtBEP20.json'
-
 import {
   User,
   getAddressByPhoneNumber,
@@ -11,10 +8,10 @@ import {
 } from 'lib/user'
 import { supabase } from '../../lib/supabase'
 
-const quickNodeUrl = process.env.QUICK_NODE_URL
+const rpcUrl = process.env.HELA_RPC_URL
 
-if (!quickNodeUrl) {
-  throw new Error('QUICK_NODE_URL is not defined')
+if (!rpcUrl) {
+  throw new Error('HELA_RPC_URL is not defined')
 }
 
 type Status =
@@ -28,7 +25,7 @@ type PaymentRequest = {
   id: string
   createdAt: string
   fromUserId: string
-  to: string // address
+  to: string
   toUserId: string
   status: Status
   amount: number | null
@@ -46,8 +43,6 @@ export async function makePaymentRequest({
   to: Address | PhoneNumber | null
   amount: number | null
 }): Promise<PaymentRequest> {
-  // TODO: validate user has enough balance
-
   const paymentRequest = (await supabase.from('payment_requests').insert({
     status: 'ADDRESS_PENDING',
     amount,
@@ -58,7 +53,7 @@ export async function makePaymentRequest({
   return paymentRequest
 }
 
-export async function sendUsdtFromWallet({
+export async function sendHlusdFromWallet({
   tokenAmount,
   toAddress,
   privateKey,
@@ -68,38 +63,25 @@ export async function sendUsdtFromWallet({
   privateKey: string
 }) {
   try {
-    const provider = new ethers.JsonRpcProvider(quickNodeUrl)
+    const provider = new ethers.JsonRpcProvider(rpcUrl)
     const wallet = new ethers.Wallet(privateKey, provider)
-    const walletSigner = wallet.connect(provider)
 
-    // general token send
-    const contract = new ethers.Contract(
-      bscUsdtContractAddress,
-      usdtBEP20,
-      walletSigner,
-    )
+    const amountInWei = ethers.parseEther(String(tokenAmount))
 
-    // How many tokens?
-    const numberOfTokens = ethers.parseUnits(String(tokenAmount), 18)
+    const tx = await wallet.sendTransaction({
+      to: toAddress,
+      value: amountInWei,
+    })
 
-    // Send tokens
-    const transferResult = await contract.transfer(toAddress, numberOfTokens)
-    return transferResult
+    await tx.wait()
+    return tx
   } catch (error) {
     const isInsufficientFunds = (error as Error).message.includes(
-      'transfer amount exceeds balance',
+      'insufficient funds',
     )
 
     if (isInsufficientFunds) {
-      throw new Error('insufficient funds for gas')
-    }
-
-    const isInsufficientGas = (error as Error).message.includes(
-      'insufficient funds for gas',
-    )
-
-    if (isInsufficientGas) {
-      throw new Error('No tenés suficiente BNB para pagar el gas')
+      throw new Error('Insufficient HLUSD balance to complete this transaction')
     }
 
     throw error
@@ -196,7 +178,7 @@ export async function addReceiverToPayment({
   const receiverUser = await getUserFromPhoneNumber(receiver)
   if (!isAddress && !receiverUser) {
     throw new Error(
-      `Invalid remitent, must be a valid address or phone number of a registered user ${JSON.stringify(
+      `Invalid recipient, must be a valid address or phone number of a registered user ${JSON.stringify(
         receiver,
       )}`,
     )
@@ -247,8 +229,9 @@ export async function cancelPaymentRequest(userId: string) {
     .neq('status', 'CANCELLED')
     .neq('status', 'ERROR')
 }
-export function getBscScanUrlForAddress(address: string) {
-  return `https://goto.bscscan.com/address/${address}`
+
+export function getHelaScanUrlForAddress(address: string) {
+  return `https://testnet-scanner.helachain.com/address/${address}`
 }
 
 export async function updatePaymentRequestToError(userId: string) {
