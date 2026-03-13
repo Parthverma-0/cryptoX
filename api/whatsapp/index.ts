@@ -38,7 +38,7 @@ const handler: VercelApiHandler = async (
   } else if (req.method === 'POST') {
     console.log('POST /api/whatsapp received', JSON.stringify(req.body, null, 2))
 
-    const messageUrl = `https://${process.env.VERCEL_PROD_URL}/api/whatsapp/message`
+    const messageUrl = `https://${process.env.PROD_URL}/api/whatsapp/message`
     console.log('Forwarding to:', messageUrl)
 
     try {
