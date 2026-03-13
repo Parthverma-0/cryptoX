@@ -1,0 +1,385 @@
+import type { VercelApiHandler, VercelResponse } from '@vercel/node'
+
+import {
+  Whatsapp,
+  sendMessageToPhoneNumber,
+  sendSimpleButtonsMessage,
+} from '../../lib/whatsapp'
+
+import {
+  WhatsappNewMessageEventNotificationRequest,
+  WhatsappParsedMessage,
+} from './types'
+
+import {
+  getAddressByPhoneNumber,
+  getPrivateKeyByPhoneNumber,
+  getUserFromPhoneNumber,
+} from '../../lib/user'
+
+import { createUser } from '../../lib/user'
+
+import { getAccountBalances } from 'lib/crypto'
+import {
+  Address,
+  PhoneNumber,
+  addReceiverToPayment,
+  cancelPaymentRequest,
+  confirmPaymentRequest,
+  getBscScanUrlForAddress,
+  getReceiverUserFromUncompletedPaymentRequest,
+  getRecipientAddressFromUncompletedPaymentRequest,
+  isReceiverInputPending,
+  isUserAwaitingAmountInput,
+  makePaymentRequest,
+  sendUsdtFromWallet,
+  updatePaymentRequestToError,
+} from '../../lib/crypto/transaction'
+import { transformStringToNumber } from '../../lib/utils/number'
+
+async function sendMenuButtonsTo(phoneNumber: string) {
+  await sendSimpleButtonsMessage(phoneNumber, 'What would you like to do?', [
+    { title: 'Deposit funds', id: 'check_address' },
+    { title: 'Send money 💸', id: 'send_money' },
+    { title: 'Check balance 🔎', id: 'check_balance' },
+  ])
+}
+
+const handler: VercelApiHandler = async (
+  req: WhatsappNewMessageEventNotificationRequest,
+  res: VercelResponse,
+) => {
+  console.log('POST /api/whatsapp/message received')
+
+  if (req.method !== 'POST') {
+    res.status(405).json({ message: 'Method not allowed' })
+    return
+  }
+
+  try {
+    console.log('Parsing message body:', JSON.stringify(req.body, null, 2))
+    const data: WhatsappParsedMessage = Whatsapp.parseMessage(req.body)
+    console.log('Parsed message:', JSON.stringify(data, null, 2))
+
+    if (data?.isMessage) {
+      const {
+        message: {
+          from: { phone: recipientPhone, name: recipientName },
+          type: typeOfMessage,
+          message_id: messageId,
+          text,
+        },
+      } = data
+
+      console.log(`Message from ${recipientPhone} (${recipientName}): type=${typeOfMessage}`)
+
+      const sendMenuButtons = async () => {
+        sendMenuButtonsTo(recipientPhone)
+      }
+
+      // fallback for deployed bot. Remove when we have a proper way to handle this
+      const isBrazilNumber = recipientPhone.startsWith('55')
+      if (isBrazilNumber) {
+        if (process.env.ADMIN_PHONE_NUMBER && process.env.BRAZIL_MESSAGE) {
+          await sendMessageToPhoneNumber(
+            recipientPhone,
+            process.env.BRAZIL_MESSAGE,
+          )
+          await sendMessageToPhoneNumber(
+            process.env.ADMIN_PHONE_NUMBER,
+            `${recipientPhone} - ${recipientName} has tried to use bot`,
+          )
+        }
+
+        return
+      }
+
+      try {
+        if (typeOfMessage === 'text_message') {
+          console.log('Handling text_message...')
+          const user = await getUserFromPhoneNumber(recipientPhone)
+          console.log('User found:', user)
+
+          if (user) {
+            if (text && (await isReceiverInputPending(user.id))) {
+              const receiver: PhoneNumber | Address = text.body
+
+              try {
+                const validatedReceiver = await addReceiverToPayment({
+                  userId: user.id,
+                  receiver,
+                })
+                await sendSimpleButtonsMessage(
+                  recipientPhone,
+                  `How many USDT would you like to send to ${validatedReceiver}?`,
+                  [{ title: 'Cancel transaction', id: 'cancel_send_money' }],
+                )
+                return
+              } catch (error) {
+                await sendSimpleButtonsMessage(
+                  recipientPhone,
+                  `The value is not valid. Make sure it matches a wallet address format or that the phone number has a Cryptosapp account.\n ${error}`,
+                  [{ title: 'Cancel transaction', id: 'cancel_send_money' }],
+                )
+              }
+
+              return
+            }
+            if (text && (await isUserAwaitingAmountInput(user.id))) {
+              let amount: number
+
+              try {
+                amount = transformStringToNumber(text.body)
+              } catch (error) {
+                await sendSimpleButtonsMessage(
+                  recipientPhone,
+                  `Invalid format 🤕. Please enter a whole or decimal number!`,
+                  [{ title: 'Cancel transaction', id: 'cancel_send_money' }],
+                )
+                return
+              }
+
+              try {
+                const receiverUser =
+                  await getReceiverUserFromUncompletedPaymentRequest(user.id)
+
+                const senderPrivateKey = await getPrivateKeyByPhoneNumber(
+                  recipientPhone,
+                )
+
+                await sendUsdtFromWallet({
+                  tokenAmount: amount,
+                  privateKey: senderPrivateKey,
+                  toAddress:
+                    await getRecipientAddressFromUncompletedPaymentRequest(
+                      user.id,
+                    ),
+                })
+
+                await confirmPaymentRequest({ userId: user.id, amount })
+
+                const address = await getAddressByPhoneNumber(recipientPhone)
+
+                await sendMessageToPhoneNumber(
+                  recipientPhone,
+                  'Payment successful! 🎉 For more details: 👇👇👇',
+                )
+
+                if (receiverUser) {
+                  await sendMessageToPhoneNumber(
+                    receiverUser.phoneNumer,
+                    `You received ${amount} USDT from ${user.name} 🌟`,
+                  )
+                  await sendMenuButtonsTo(receiverUser.phoneNumer)
+                }
+
+                const bscScanUrl = getBscScanUrlForAddress(address)
+
+                await sendMessageToPhoneNumber(recipientPhone, bscScanUrl)
+              } catch (error) {
+                await updatePaymentRequestToError(user.id)
+
+                await sendMessageToPhoneNumber(
+                  recipientPhone,
+                  `Payment could not be completed 😢`,
+                )
+
+                await sendMessageToPhoneNumber(
+                  recipientPhone,
+                  `We encountered an error: ${error}`,
+                )
+              }
+              return
+            }
+
+            await sendMessageToPhoneNumber(
+              recipientPhone,
+              `Welcome back${recipientName ? ` ${recipientName}` : ''}! 👋`,
+            )
+            await sendMenuButtons()
+          } else {
+            console.log('New user! Sending welcome message...')
+            await sendMessageToPhoneNumber(
+              recipientPhone,
+              `Hi ${recipientName}! 👋`,
+            )
+            await sendMessageToPhoneNumber(
+              recipientPhone,
+              `I'm your favorite crypto-bot 🤖.\nYour safest, most reliable, and easiest digital wallet service.`,
+            )
+            await sendSimpleButtonsMessage(
+              recipientPhone,
+              "It looks like you don't have a wallet linked to this number. Would you like to create one?",
+              [{ title: 'Create a wallet', id: 'create_wallet' }],
+            )
+          }
+        }
+
+        if (typeOfMessage === 'simple_button_message') {
+          console.log('Handling button message...')
+          const button_id = data.message.button_reply.id
+          console.log('Button ID:', button_id)
+
+          const user = await getUserFromPhoneNumber(recipientPhone)
+
+          switch (button_id) {
+            case 'send_money': {
+              if (!user) {
+                throw new Error('Unexpectedly could not find the user')
+              }
+
+              const { id } = user
+
+              await makePaymentRequest({
+                amount: null,
+                fromUserId: id,
+                to: null,
+              })
+
+              await sendMessageToPhoneNumber(
+                recipientPhone,
+                `Who would you like to send money to?`,
+              )
+
+              await sendSimpleButtonsMessage(
+                recipientPhone,
+                `Enter the recipient's phone number or wallet address`,
+                [
+                  {
+                    title: 'Cancel',
+                    id: 'cancel_send_money',
+                  },
+                ],
+              )
+
+              break
+            }
+            case 'check_balance': {
+              await sendMessageToPhoneNumber(recipientPhone, 'Loading ⏳')
+
+              const privateKey = await getPrivateKeyByPhoneNumber(
+                recipientPhone,
+              )
+
+              const { bnbBalance, usdtBalance } = await getAccountBalances(
+                privateKey,
+              )
+
+              await sendMessageToPhoneNumber(
+                recipientPhone,
+                `${bnbBalance} BNB`,
+              )
+              await sendMessageToPhoneNumber(
+                recipientPhone,
+                `${usdtBalance} USDT`,
+              )
+              await sendMenuButtons()
+              break
+            }
+            case 'check_address': {
+              await sendMessageToPhoneNumber(recipientPhone, 'Loading ⏳')
+              const address = await getAddressByPhoneNumber(recipientPhone)
+              await sendMessageToPhoneNumber(
+                recipientPhone,
+                'To deposit funds, you need to send them to this address:',
+              )
+              await sendMessageToPhoneNumber(recipientPhone, address)
+              await sendMessageToPhoneNumber(
+                recipientPhone,
+                '(Send USDT or BNB via the Binance Smart Chain network)',
+              )
+              await sendMenuButtons()
+              break
+            }
+            case 'create_wallet': {
+              await sendMessageToPhoneNumber(
+                recipientPhone,
+                'Creating your wallet! 🔨',
+              )
+
+              const walletAddress = await createUser(
+                recipientPhone,
+                recipientName,
+              )
+
+              await sendMessageToPhoneNumber(
+                recipientPhone,
+                'Your wallet has been created! 🚀✨\nYour address is:',
+              )
+              await sendSimpleButtonsMessage(recipientPhone, walletAddress, [
+                { title: 'What is this?', id: 'info_address' },
+              ])
+
+              await sendMenuButtons()
+
+              break
+            }
+            case 'info_address': {
+              await sendSimpleButtonsMessage(
+                recipientPhone,
+                'An address is like a bank account number you can use to receive money from others. This wallet uses the Binance Smart Chain network and supports the USDT cryptocurrency. You will need BNB to make transfers.',
+                [{ title: 'What is BNB?', id: 'info_bnb' }],
+              )
+
+              await sendMenuButtons()
+
+              break
+            }
+            case 'info_bnb':
+              await sendMessageToPhoneNumber(
+                recipientPhone,
+                'BNB is the fuel that powers the blockchain network.',
+              )
+              await sendMessageToPhoneNumber(
+                recipientPhone,
+                'For more information, check out this link:\nhttps://academy.binance.com/en/articles/what-is-bnb',
+              )
+              await sendMenuButtons()
+              break
+            case 'cancel_send_money':
+              if (!user) {
+                throw new Error('Unexpectedly could not find the user')
+              }
+              await cancelPaymentRequest(user.id)
+              await sendMessageToPhoneNumber(
+                recipientPhone,
+                'Transaction cancelled.',
+              )
+
+              await sendMenuButtons()
+              break
+            default:
+              break
+          }
+        }
+      } catch (error) {
+        console.error('Error handling message:', error)
+        await sendMessageToPhoneNumber(
+          recipientPhone,
+          `🔴 An error occurred: ${JSON.stringify(
+            error,
+            Object.getOwnPropertyNames(error),
+          )}`,
+        )
+      }
+
+      // note: important to mark message as read to avoid duplicate messages
+      await Whatsapp.markMessageAsRead({
+        message_id: messageId,
+      })
+
+      res.status(200).send('ok')
+      return
+    } else {
+      console.log('Not a message event, ignoring...')
+      res.status(200).send('ok')
+      return
+    }
+  } catch (error) {
+    console.error('Top level error:', error)
+    res.status(500)
+    return
+  }
+}
+
+export default handler
