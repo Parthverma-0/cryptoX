@@ -139,6 +139,6 @@ Contributions are welcome! To get started:
 
 ---
 
-## Built at a Hackathon with ❤️
+## Built by Parth Verma and Raghav Arora with ❤️
 
 CryptoX was built as a hackathon project exploring the intersection of conversational interfaces and decentralized finance on Hela Chain.
