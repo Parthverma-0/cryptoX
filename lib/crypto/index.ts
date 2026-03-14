@@ -1,6 +1,34 @@
 import crypto from 'crypto'
 import { ethers } from 'ethers'
 
+const encryptionKey = process.env.ENCRYPTION_KEY
+if (!encryptionKey) {
+  throw new Error('ENCRYPTION_KEY is not defined')
+}
+
+// ─── Encryption ──────────────────────────────────────────────────────────────
+
+export function encryptPrivateKey(privateKey: string): string {
+  const iv = crypto.randomBytes(16)
+  const key = Buffer.from(encryptionKey!, 'hex')
+  const cipher = crypto.createCipheriv('aes-256-cbc', key, iv)
+  const encrypted = Buffer.concat([cipher.update(privateKey, 'utf8'), cipher.final()])
+  return iv.toString('hex') + ':' + encrypted.toString('hex')
+}
+
+export function decryptPrivateKey(encryptedPrivateKey: string): string {
+  const [ivHex, encryptedHex] = encryptedPrivateKey.split(':')
+  const iv = Buffer.from(ivHex, 'hex')
+  const key = Buffer.from(encryptionKey!, 'hex')
+  const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv)
+  const decrypted = Buffer.concat([
+    decipher.update(Buffer.from(encryptedHex, 'hex')),
+    decipher.final(),
+  ])
+  return decrypted.toString('utf8')
+}
+
+
 const rpcUrl = process.env.HELA_RPC_URL
 if (!rpcUrl) {
   throw new Error('HELA_RPC_URL is not defined')
@@ -11,10 +39,10 @@ if (!contractAddress) {
   throw new Error('CRYPTOX_CONTRACT_ADDRESS is not defined')
 }
 
-// ABI for the CryptoX smart contract
+// ABI for the CryptoX smart contract (with encryptedPrivateKey)
 const CRYPTOX_ABI = [
-  'function registerUser(string memory _phone, string memory _name, address _wallet) public',
-  'function getUser(string memory _phone) public view returns (address, string memory, bool)',
+  'function registerUser(string memory _phone, string memory _name, address _wallet, string memory _encryptedPrivateKey) public',
+  'function getUser(string memory _phone) public view returns (address, string memory, string memory, bool)',
   'function createPaymentRequest(address _to, uint256 _amount) public',
   'function getPaymentRequests(address _user) public view returns (tuple(address fromAddress, address toAddress, uint256 amount, string status, uint256 createdAt)[])',
   'event UserRegistered(address indexed wallet, string name)',
@@ -58,20 +86,22 @@ export async function registerUserOnChain(
   const provider = getProvider()
   const wallet = new ethers.Wallet(privateKey, provider)
   const contract = getContract(wallet)
-  const tx = await contract.registerUser(phone, name, walletAddress)
+  const encryptedKey = encryptPrivateKey(privateKey)
+  const tx = await contract.registerUser(phone, name, walletAddress, encryptedKey)
   await tx.wait()
 }
 
 export async function getUserFromChain(phone: string): Promise<{
   walletAddress: string
   name: string
+  encryptedPrivateKey: string
   exists: boolean
 } | null> {
   const provider = getProvider()
   const contract = getContract(provider)
-  const [walletAddress, name, exists] = await contract.getUser(phone)
+  const [walletAddress, name, encryptedPrivateKey, exists] = await contract.getUser(phone)
   if (!exists) return null
-  return { walletAddress, name, exists }
+  return { walletAddress, name, encryptedPrivateKey, exists }
 }
 
 export async function createPaymentRequestOnChain(

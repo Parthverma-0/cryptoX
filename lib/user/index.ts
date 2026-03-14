@@ -1,10 +1,13 @@
-import { supabase } from '../supabase'
-
-import { buildPrivateKey, getAddressFromPrivateKey } from '../crypto'
+import {
+  buildPrivateKey,
+  getAddressFromPrivateKey,
+  getUserFromChain,
+  registerUserOnChain,
+  decryptPrivateKey,
+} from '../crypto'
 
 export type User = {
   privateKey: string
-  id: string
   createdAt: string
   phoneNumer: string
   name: string
@@ -14,84 +17,57 @@ export type User = {
 export async function isUserRegistered(
   recipientPhone: string,
 ): Promise<boolean> {
-  const { data, error } = await supabase
-    .from('users')
-    .select('phone_number')
-    .eq('phone_number', recipientPhone)
-  if (error) {
-    throw new Error('Error checking if user is registered')
-  }
-  return data.length > 0
+  const user = await getUserFromChain(recipientPhone)
+  return user !== null && user.exists
 }
 
 export async function getPrivateKeyByPhoneNumber(
   recipientPhone: string,
 ): Promise<string> {
-  const { data, error } = await supabase
-    .from('users')
-    .select('private_key')
-    .eq('phone_number', recipientPhone)
-
-  if (error || data.length === 0) {
-    throw new Error(
-      `Error getting user address, ${JSON.stringify({
-        error,
-        recipientPhone,
-      })} `,
-    )
+  const user = await getUserFromChain(recipientPhone)
+  if (!user || !user.exists) {
+    throw new Error(`User not found for phone: ${recipientPhone}`)
   }
-  return data[0].private_key
+  return decryptPrivateKey(user.encryptedPrivateKey)
 }
 
 export async function getAddressByPhoneNumber(
   recipientPhone: string,
 ): Promise<string> {
-  const user = await getUserFromPhoneNumber(recipientPhone)
-
-  if (!user) {
+  const user = await getUserFromChain(recipientPhone)
+  if (!user || !user.exists) {
     throw new Error('User not found')
   }
+  return user.walletAddress
+}
 
-  return user.address
+export async function getUserFromPhoneNumber(
+  recipientPhone: string,
+): Promise<User | null> {
+  const sanitizedPhone = recipientPhone.replace(/[^0-9.]/g, '')
+  const user = await getUserFromChain(sanitizedPhone)
+  if (!user || !user.exists) return null
+  const privateKey = decryptPrivateKey(user.encryptedPrivateKey)
+  return {
+    createdAt: new Date().toISOString(),
+    name: user.name,
+    phoneNumer: sanitizedPhone,
+    privateKey,
+    address: user.walletAddress,
+  }
 }
 
 export async function getUserFromId(userId: string): Promise<User> {
-  const { data, error } = await supabase
-    .from('users')
-    .select('*')
-    .eq('id', userId)
-
-  if (error || data.length === 0) {
-    throw new Error(`Error getting user from id, ${JSON.stringify({ error })}`)
-  }
-
-  const [{ created_at, id, name, phone_number, private_key, address }] = data
-
-  return {
-    createdAt: created_at,
-    id,
-    name,
-    phoneNumer: phone_number,
-    privateKey: private_key,
-    address,
-  }
+  // userId is the wallet address on-chain
+  throw new Error(
+    'getUserFromId is not supported in on-chain mode. Use getUserFromPhoneNumber instead.',
+  )
 }
 
 export async function getAddressByUserId(userId: string): Promise<string> {
-  const { data, error } = await supabase
-    .from('users')
-    .select('address')
-    .eq('id', userId)
-
-  if (error || data.length === 0) {
-    throw new Error(
-      `Error getting user address, ${JSON.stringify({
-        error,
-        userId,
-      })} `,
-    )
-  }
-  return data[0].address
+  throw new Error(
+    'getAddressByUserId is not supported in on-chain mode. Use getAddressByPhoneNumber instead.',
+  )
 }
 
 export async function createUser(
@@ -101,45 +77,12 @@ export async function createUser(
   const privateKey = buildPrivateKey()
   const userAddress = getAddressFromPrivateKey(privateKey)
 
-  const user = await supabase.from('users').insert({
-    phone_number: recipientPhone,
-    name: recipientName,
-    private_key: privateKey,
-    address: userAddress,
-  })
+  await registerUserOnChain(
+    recipientPhone,
+    recipientName || '',
+    privateKey,
+    userAddress,
+  )
 
-  if (user.error) {
-    throw new Error('Error creating user')
-  }
-  return getAddressFromPrivateKey(privateKey)
-}
-
-export async function getUserFromPhoneNumber(
-  recipientPhone: string,
-): Promise<User | null> {
-  const sanitizedPhoneNumber = recipientPhone.replace(/[^0-9.]/g, '')
-
-  const { data: users, error } = await supabase
-    .from('users')
-    .select('*')
-    .like('phone_number', `%${sanitizedPhoneNumber}%`)
-
-  if (error) {
-    throw new Error(`Error getting user from phone number ${error}`)
-  }
-
-  if (users.length === 0) {
-    return null
-  }
-
-  const [{ created_at, id, name, phone_number, private_key, address }] = users
-
-  return {
-    createdAt: created_at,
-    id,
-    name,
-    phoneNumer: phone_number,
-    privateKey: private_key,
-    address,
-  }
+  return userAddress
 }

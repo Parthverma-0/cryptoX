@@ -77,14 +77,10 @@ const handler: VercelApiHandler = async (
         sendMenuButtonsTo(recipientPhone)
       }
 
-      // fallback for deployed bot. Remove when we have a proper way to handle this
       const isBrazilNumber = recipientPhone.startsWith('55')
       if (isBrazilNumber) {
         if (process.env.ADMIN_PHONE_NUMBER && process.env.BRAZIL_MESSAGE) {
-          await sendMessageToPhoneNumber(
-            recipientPhone,
-            process.env.BRAZIL_MESSAGE,
-          )
+          await sendMessageToPhoneNumber(recipientPhone, process.env.BRAZIL_MESSAGE)
           await sendMessageToPhoneNumber(
             process.env.ADMIN_PHONE_NUMBER,
             `${recipientPhone} - ${recipientName} has tried to use bot`,
@@ -100,14 +96,13 @@ const handler: VercelApiHandler = async (
           console.log('User found:', user)
 
           if (user) {
-            if (text && (await isReceiverInputPending(user.id))) {
-              const receiver: PhoneNumber | Address = text.body
+            // Use address as userId since we no longer have a DB id
+            const userId = user.address
 
+            if (text && (await isReceiverInputPending(userId))) {
+              const receiver: PhoneNumber | Address = text.body
               try {
-                const validatedReceiver = await addReceiverToPayment({
-                  userId: user.id,
-                  receiver,
-                })
+                const validatedReceiver = await addReceiverToPayment({ userId, receiver })
                 await sendSimpleButtonsMessage(
                   recipientPhone,
                   `How many HLUSD would you like to send to ${validatedReceiver}?`,
@@ -121,13 +116,11 @@ const handler: VercelApiHandler = async (
                   [{ title: 'Cancel transaction', id: 'cancel_send_money' }],
                 )
               }
-
               return
             }
 
-            if (text && (await isUserAwaitingAmountInput(user.id))) {
+            if (text && (await isUserAwaitingAmountInput(userId))) {
               let amount: number
-
               try {
                 amount = transformStringToNumber(text.body)
               } catch (error) {
@@ -140,32 +133,20 @@ const handler: VercelApiHandler = async (
               }
 
               try {
-                const receiverUser =
-                  await getReceiverUserFromUncompletedPaymentRequest(user.id)
-
-                const senderPrivateKey = await getPrivateKeyByPhoneNumber(
-                  recipientPhone,
-                )
-
-                // ✅ fromAddress now passed for on-chain payment recording
+                const receiverUser = await getReceiverUserFromUncompletedPaymentRequest(userId)
+                const senderPrivateKey = await getPrivateKeyByPhoneNumber(recipientPhone)
                 const fromAddress = await getAddressByPhoneNumber(recipientPhone)
 
                 await sendHlusdFromWallet({
                   tokenAmount: amount,
                   privateKey: senderPrivateKey,
                   fromAddress,
-                  toAddress:
-                    await getRecipientAddressFromUncompletedPaymentRequest(
-                      user.id,
-                    ),
+                  toAddress: await getRecipientAddressFromUncompletedPaymentRequest(userId),
                 })
 
-                await confirmPaymentRequest({ userId: user.id, amount })
+                await confirmPaymentRequest({ userId, amount })
 
-                await sendMessageToPhoneNumber(
-                  recipientPhone,
-                  'Payment successful! 🎉 For more details: 👇👇👇',
-                )
+                await sendMessageToPhoneNumber(recipientPhone, 'Payment successful! 🎉 For more details: 👇👇👇')
 
                 if (receiverUser) {
                   await sendMessageToPhoneNumber(
@@ -178,17 +159,9 @@ const handler: VercelApiHandler = async (
                 const helaScanUrl = getHelaScanUrlForAddress(fromAddress)
                 await sendMessageToPhoneNumber(recipientPhone, helaScanUrl)
               } catch (error) {
-                await updatePaymentRequestToError(user.id)
-
-                await sendMessageToPhoneNumber(
-                  recipientPhone,
-                  `Payment could not be completed 😢`,
-                )
-
-                await sendMessageToPhoneNumber(
-                  recipientPhone,
-                  `We encountered an error: ${error}`,
-                )
+                await updatePaymentRequestToError(userId)
+                await sendMessageToPhoneNumber(recipientPhone, `Payment could not be completed 😢`)
+                await sendMessageToPhoneNumber(recipientPhone, `We encountered an error: ${error}`)
               }
               return
             }
@@ -229,70 +202,42 @@ const handler: VercelApiHandler = async (
 
           switch (button_id) {
             case 'send_money': {
-              if (!user) {
-                throw new Error('Unexpectedly could not find the user')
-              }
-
-              const { id } = user
+              if (!user) throw new Error('Unexpectedly could not find the user')
 
               await makePaymentRequest({
                 amount: null,
-                fromUserId: id,
+                fromUserId: user.address,
                 to: null,
               })
 
-              await sendMessageToPhoneNumber(
-                recipientPhone,
-                `Who would you like to send money to?`,
-              )
-
+              await sendMessageToPhoneNumber(recipientPhone, `Who would you like to send money to?`)
               await sendSimpleButtonsMessage(
                 recipientPhone,
                 `Enter the recipient's phone number or wallet address`,
                 [{ title: 'Cancel', id: 'cancel_send_money' }],
               )
-
               break
             }
             case 'check_balance': {
               await sendMessageToPhoneNumber(recipientPhone, 'Loading ⏳')
-
               const privateKey = await getPrivateKeyByPhoneNumber(recipientPhone)
               const { hlusdBalance } = await getAccountBalances(privateKey)
-
-              await sendMessageToPhoneNumber(
-                recipientPhone,
-                `${hlusdBalance} HLUSD`,
-              )
+              await sendMessageToPhoneNumber(recipientPhone, `${hlusdBalance} HLUSD`)
               await sendMenuButtons()
               break
             }
             case 'check_address': {
               await sendMessageToPhoneNumber(recipientPhone, 'Loading ⏳')
               const address = await getAddressByPhoneNumber(recipientPhone)
-              await sendMessageToPhoneNumber(
-                recipientPhone,
-                'To deposit funds, you need to send them to this address:',
-              )
+              await sendMessageToPhoneNumber(recipientPhone, 'To deposit funds, you need to send them to this address:')
               await sendMessageToPhoneNumber(recipientPhone, address)
-              await sendMessageToPhoneNumber(
-                recipientPhone,
-                '(Send HLUSD via the Hela Chain network)',
-              )
+              await sendMessageToPhoneNumber(recipientPhone, '(Send HLUSD via the Hela Chain network)')
               await sendMenuButtons()
               break
             }
             case 'create_wallet': {
-              await sendMessageToPhoneNumber(
-                recipientPhone,
-                'Creating your wallet! 🔨',
-              )
-
-              const walletAddress = await createUser(
-                recipientPhone,
-                recipientName,
-              )
-
+              await sendMessageToPhoneNumber(recipientPhone, 'Creating your wallet! 🔨')
+              const walletAddress = await createUser(recipientPhone, recipientName)
               await sendMessageToPhoneNumber(
                 recipientPhone,
                 'Your *CryptoX* wallet on *Hela Chain* has been created! 🚀✨\nYour address is:',
@@ -300,7 +245,6 @@ const handler: VercelApiHandler = async (
               await sendSimpleButtonsMessage(recipientPhone, walletAddress, [
                 { title: 'What is this?', id: 'info_address' },
               ])
-
               await sendMenuButtons()
               break
             }
@@ -310,7 +254,6 @@ const handler: VercelApiHandler = async (
                 'An address is like a bank account number you can use to receive money from others. Your CryptoX wallet runs on Hela Chain and uses HLUSD as its native currency.',
                 [{ title: 'What is HLUSD?', id: 'info_hlusd' }],
               )
-
               await sendMenuButtons()
               break
             }
@@ -319,21 +262,13 @@ const handler: VercelApiHandler = async (
                 recipientPhone,
                 'HLUSD is the native currency of Hela Chain — used for instant payments and transaction fees on the network.',
               )
-              await sendMessageToPhoneNumber(
-                recipientPhone,
-                'For more information, visit:\nhttps://helachain.com',
-              )
+              await sendMessageToPhoneNumber(recipientPhone, 'For more information, visit:\nhttps://helachain.com')
               await sendMenuButtons()
               break
             case 'cancel_send_money':
-              if (!user) {
-                throw new Error('Unexpectedly could not find the user')
-              }
-              await cancelPaymentRequest(user.id)
-              await sendMessageToPhoneNumber(
-                recipientPhone,
-                'Transaction cancelled.',
-              )
+              if (!user) throw new Error('Unexpectedly could not find the user')
+              await cancelPaymentRequest(user.address)
+              await sendMessageToPhoneNumber(recipientPhone, 'Transaction cancelled.')
               await sendMenuButtons()
               break
             default:
@@ -344,17 +279,11 @@ const handler: VercelApiHandler = async (
         console.error('Error handling message:', error)
         await sendMessageToPhoneNumber(
           recipientPhone,
-          `🔴 An error occurred: ${JSON.stringify(
-            error,
-            Object.getOwnPropertyNames(error),
-          )}`,
+          `🔴 An error occurred: ${JSON.stringify(error, Object.getOwnPropertyNames(error))}`,
         )
       }
 
-      await Whatsapp.markMessageAsRead({
-        message_id: messageId,
-      })
-
+      await Whatsapp.markMessageAsRead({ message_id: messageId })
       res.status(200).send('ok')
       return
     } else {
