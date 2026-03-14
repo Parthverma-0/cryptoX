@@ -90,7 +90,6 @@ const handler: VercelApiHandler = async (
             `${recipientPhone} - ${recipientName} has tried to use bot`,
           )
         }
-
         return
       }
 
@@ -125,6 +124,7 @@ const handler: VercelApiHandler = async (
 
               return
             }
+
             if (text && (await isUserAwaitingAmountInput(user.id))) {
               let amount: number
 
@@ -147,9 +147,13 @@ const handler: VercelApiHandler = async (
                   recipientPhone,
                 )
 
+                // ✅ fromAddress now passed for on-chain payment recording
+                const fromAddress = await getAddressByPhoneNumber(recipientPhone)
+
                 await sendHlusdFromWallet({
                   tokenAmount: amount,
                   privateKey: senderPrivateKey,
+                  fromAddress,
                   toAddress:
                     await getRecipientAddressFromUncompletedPaymentRequest(
                       user.id,
@@ -157,8 +161,6 @@ const handler: VercelApiHandler = async (
                 })
 
                 await confirmPaymentRequest({ userId: user.id, amount })
-
-                const address = await getAddressByPhoneNumber(recipientPhone)
 
                 await sendMessageToPhoneNumber(
                   recipientPhone,
@@ -173,7 +175,7 @@ const handler: VercelApiHandler = async (
                   await sendMenuButtonsTo(receiverUser.phoneNumer)
                 }
 
-                const helaScanUrl = getHelaScanUrlForAddress(address)
+                const helaScanUrl = getHelaScanUrlForAddress(fromAddress)
                 await sendMessageToPhoneNumber(recipientPhone, helaScanUrl)
               } catch (error) {
                 await updatePaymentRequestToError(user.id)
@@ -349,7 +351,6 @@ const handler: VercelApiHandler = async (
         )
       }
 
-      // note: important to mark message as read to avoid duplicate messages
       await Whatsapp.markMessageAsRead({
         message_id: messageId,
       })

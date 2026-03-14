@@ -3,10 +3,11 @@ import { ethers } from 'ethers'
 import {
   User,
   getAddressByPhoneNumber,
-  getUserFromId,
   getUserFromPhoneNumber,
+  getUserFromId,
 } from 'lib/user'
 import { supabase } from '../../lib/supabase'
+import { getContract, getProvider } from '.'
 
 const rpcUrl = process.env.HELA_RPC_URL
 
@@ -34,6 +35,8 @@ type PaymentRequest = {
 export type Address = string
 export type PhoneNumber = string
 
+// ─── Payment Requests (on-chain) ────────────────────────────────────────────
+
 export async function makePaymentRequest({
   fromUserId,
   to,
@@ -43,6 +46,8 @@ export async function makePaymentRequest({
   to: Address | PhoneNumber | null
   amount: number | null
 }): Promise<PaymentRequest> {
+  // Store payment request in Supabase for stateful flow tracking
+  // (on-chain confirmation happens at sendHlusdFromWallet step)
   const paymentRequest = (await supabase.from('payment_requests').insert({
     status: 'ADDRESS_PENDING',
     amount,
@@ -57,23 +62,31 @@ export async function sendHlusdFromWallet({
   tokenAmount,
   toAddress,
   privateKey,
+  fromAddress,
 }: {
   tokenAmount: number
   toAddress: string
   privateKey: string
+  fromAddress: string
 }) {
   try {
-    const provider = new ethers.JsonRpcProvider(rpcUrl)
+    const provider = getProvider()
     const wallet = new ethers.Wallet(privateKey, provider)
 
     const amountInWei = ethers.parseEther(String(tokenAmount))
 
+    // 1. Send actual HLUSD on-chain
     const tx = await wallet.sendTransaction({
       to: toAddress,
       value: amountInWei,
     })
-
     await tx.wait()
+
+    // 2. Record payment request on smart contract
+    const contract = getContract(wallet)
+    const contractTx = await contract.createPaymentRequest(toAddress, amountInWei)
+    await contractTx.wait()
+
     return tx
   } catch (error) {
     const isInsufficientFunds = (error as Error).message.includes(
@@ -87,6 +100,8 @@ export async function sendHlusdFromWallet({
     throw error
   }
 }
+
+// ─── Payment Request State (Supabase for flow tracking) ─────────────────────
 
 export async function getUserPaymentRequests(
   userId: string,
@@ -115,7 +130,6 @@ export async function getUserPaymentRequests(
 
 export async function isReceiverInputPending(userId: string) {
   const paymentRequests = await getUserPaymentRequests(userId)
-
   return paymentRequests.some(
     (paymentRequest) => paymentRequest.status === 'ADDRESS_PENDING',
   )
@@ -125,15 +139,12 @@ export async function getRecipientAddressFromUncompletedPaymentRequest(
   userId: string,
 ): Promise<string> {
   const paymentRequests = await getUserPaymentRequests(userId)
-
   const pendingPaymentRequest = paymentRequests.find(
     (paymentRequest) => paymentRequest.status === 'AMOUNT_PENDING',
   )
-
   if (!pendingPaymentRequest) {
     throw new Error('No pending payment requests found')
   }
-
   return pendingPaymentRequest.to
 }
 
@@ -141,27 +152,19 @@ export async function getReceiverUserFromUncompletedPaymentRequest(
   userId: string,
 ): Promise<User | null> {
   const paymentRequests = await getUserPaymentRequests(userId)
-
   const pendingPaymentRequest = paymentRequests.find(
     (paymentRequest) => paymentRequest.status === 'AMOUNT_PENDING',
   )
-
   if (!pendingPaymentRequest) {
     throw new Error('No pending payment requests found')
   }
-
   const { toUserId } = pendingPaymentRequest
-
-  if (!toUserId) {
-    return null
-  }
-
+  if (!toUserId) return null
   return getUserFromId(toUserId)
 }
 
 export async function isUserAwaitingAmountInput(userId: string) {
   const paymentRequests = await getUserPaymentRequests(userId)
-
   return paymentRequests.some(
     (paymentRequest) => paymentRequest.status === 'AMOUNT_PENDING',
   )
@@ -176,6 +179,7 @@ export async function addReceiverToPayment({
 }) {
   const isAddress = ethers.isAddress(receiver)
   const receiverUser = await getUserFromPhoneNumber(receiver)
+
   if (!isAddress && !receiverUser) {
     throw new Error(
       `Invalid recipient, must be a valid address or phone number of a registered user ${JSON.stringify(
@@ -230,10 +234,6 @@ export async function cancelPaymentRequest(userId: string) {
     .neq('status', 'ERROR')
 }
 
-export function getHelaScanUrlForAddress(address: string) {
-  return `https://testnet-scanner.helachain.com/address/${address}`
-}
-
 export async function updatePaymentRequestToError(userId: string) {
   await supabase
     .from('payment_requests')
@@ -242,4 +242,10 @@ export async function updatePaymentRequestToError(userId: string) {
     })
     .eq('from_user_id', userId)
     .eq('status', 'AMOUNT_PENDING')
+}
+
+// ─── Explorer ────────────────────────────────────────────────────────────────
+
+export function getHelaScanUrlForAddress(address: string) {
+  return `https://testnet-scanner.helachain.com/address/${address}`
 }
