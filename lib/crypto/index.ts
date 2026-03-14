@@ -84,8 +84,15 @@ export async function registerUserOnChain(
   walletAddress: string,
 ): Promise<void> {
   const provider = getProvider()
-  const wallet = new ethers.Wallet(privateKey, provider)
-  const contract = getContract(wallet)
+
+  // Operator wallet pays gas for new user registration
+  const operatorKey = process.env.OPERATOR_PRIVATE_KEY
+  if (!operatorKey) {
+    throw new Error('OPERATOR_PRIVATE_KEY is not defined')
+  }
+  const operatorWallet = new ethers.Wallet(operatorKey, provider)
+  const contract = getContract(operatorWallet)
+
   const encryptedKey = encryptPrivateKey(privateKey)
   const tx = await contract.registerUser(phone, name, walletAddress, encryptedKey)
   await tx.wait()
