@@ -123,7 +123,9 @@ https://your-tunnel-url.trycloudflare.com/api/whatsapp
 
 ## Screenshots
 
-Coming soon
+![Image](https://github.com/user-attachments/assets/8d93e07d-3007-4958-901e-15647adb4c74)
+
+![Image](https://github.com/user-attachments/assets/14a18707-86f6-4de8-a62d-c377840c01c6)
 
 ---
 
