@@ -200,11 +200,15 @@ const handler: VercelApiHandler = async (
             console.log('New user! Sending welcome message...')
             await sendMessageToPhoneNumber(
               recipientPhone,
-              `Hi ${recipientName}! 👋`,
+              `Hi ${recipientName}! 👋 Welcome to *CryptoX*\n_Built by Parth Verma & Raghav Arora_`,
             )
             await sendMessageToPhoneNumber(
               recipientPhone,
-              `I'm your favorite crypto-bot 🤖.\nYour safest, most reliable, and easiest digital wallet service on Hela Chain.`,
+              `CryptoX is a WhatsApp-native crypto wallet powered by *Hela Chain* ⛓️\n\n✅ Instant payments\n✅ Send & receive HLUSD\n✅ Non-custodial wallet\n✅ No app needed — just WhatsApp!`,
+            )
+            await sendMessageToPhoneNumber(
+              recipientPhone,
+              `Create your *Hela Chain* wallet in seconds and start sending money instantly 🚀`,
             )
             await sendSimpleButtonsMessage(
               recipientPhone,
@@ -289,7 +293,7 @@ const handler: VercelApiHandler = async (
 
               await sendMessageToPhoneNumber(
                 recipientPhone,
-                'Your wallet has been created! 🚀✨\nYour address is:',
+                'Your *CryptoX* wallet on *Hela Chain* has been created! 🚀✨\nYour address is:',
               )
               await sendSimpleButtonsMessage(recipientPhone, walletAddress, [
                 { title: 'What is this?', id: 'info_address' },
@@ -301,7 +305,7 @@ const handler: VercelApiHandler = async (
             case 'info_address': {
               await sendSimpleButtonsMessage(
                 recipientPhone,
-                'An address is like a bank account number you can use to receive money from others. This wallet runs on Hela Chain and uses HLUSD as its native currency.',
+                'An address is like a bank account number you can use to receive money from others. Your CryptoX wallet runs on Hela Chain and uses HLUSD as its native currency.',
                 [{ title: 'What is HLUSD?', id: 'info_hlusd' }],
               )
 
@@ -311,7 +315,7 @@ const handler: VercelApiHandler = async (
             case 'info_hlusd':
               await sendMessageToPhoneNumber(
                 recipientPhone,
-                'HLUSD is the native currency of Hela Chain — used for sending payments and paying transaction fees on the network.',
+                'HLUSD is the native currency of Hela Chain — used for instant payments and transaction fees on the network.',
               )
               await sendMessageToPhoneNumber(
                 recipientPhone,
