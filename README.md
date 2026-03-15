@@ -15,7 +15,7 @@ Built on **Hela Chain** with **HLUSD** as the native currency, CryptoX makes dec
 ## Demo video
 
 <!-- Add your demo video link here (YouTube / Loom / Google Drive) -->
-> 🎥 Coming soon — watch the full demo walkthrough here
+> 🎥 [Watch the full demo on YouTube](https://www.youtube.com/watch?v=pTNU_m-07uA)
 
 ---
 
@@ -179,6 +179,8 @@ Add all environment variables in your Vercel dashboard under **Settings → Envi
 ## Try it live
 
 Send **"Hello"** to **+91 89493 21383** on WhatsApp to try CryptoX right now.
+
+[👉 Click here to open chat directly](https://api.whatsapp.com/send/?phone=918949321383&text=Hi)
 
 ---
 
