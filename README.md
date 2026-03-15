@@ -12,6 +12,13 @@ Built on **Hela Chain** with **HLUSD** as the native currency, CryptoX makes dec
 
 ---
 
+## Demo video
+
+<!-- Add your demo video link here (YouTube / Loom / Google Drive) -->
+> 🎥 Coming soon — watch the full demo walkthrough here
+
+---
+
 ## How it works
 
 1. **Register** — Send any message to the bot. If you're new, it creates a Hela Chain wallet linked to your phone number instantly.
@@ -53,8 +60,6 @@ User sends "hello"
 
 <img width="1053" height="925" alt="Image" src="https://github.com/user-attachments/assets/0326f95e-0085-4360-a492-84d11e0c8d46" />
 
-
-
 **Zero database dependency** — all user data and payment history is stored on-chain. Private keys are AES-256 encrypted before being written to the smart contract.
 
 ---
@@ -68,6 +73,26 @@ Functions:
 - `registerUser(phone, name, wallet, encryptedPrivateKey)` — onboards a new user
 - `getUser(phone)` — looks up a user by phone hash
 - `createPaymentRequest(to, amount)` — records a confirmed payment permanently on-chain
+
+---
+
+## Deployment addresses & example transactions
+
+**Network:** Hela Chain Testnet (Chain ID: 666888)
+
+**Contract address:**
+`0x1AEd7744a43a464E344C44Cf1A78aBD3d41C40fD`
+
+**Explorer:**
+https://testnet.helascan.io/address/0x1AEd7744a43a464E344C44Cf1A78aBD3d41C40fD
+
+**Example transaction hashes:**
+
+| Type | Hash |
+|---|---|
+| User registration | [`0x1451b129678a362f3513cbaba51c70fd9a9234719e2c6bbaa7f44c123d1ef8b7`](https://testnet.helascan.io/tx/0x1451b129678a362f3513cbaba51c70fd9a9234719e2c6bbaa7f44c123d1ef8b7) |
+| HLUSD coin transfer | [`0x50cc41c2113bae214ff1d58e6900669093507dd1d1081402cbe7353285e2eb39`](https://testnet.helascan.io/tx/0x50cc41c2113bae214ff1d58e6900669093507dd1d1081402cbe7353285e2eb39) |
+| User registration | [`0x5f33fbba6d7cad2eedc6ebb5c5c69b4c40e8cd1783319ba873ad240de52c170d`](https://testnet.helascan.io/tx/0x5f33fbba6d7cad2eedc6ebb5c5c69b4c40e8cd1783319ba873ad240de52c170d) |
 
 ---
 
