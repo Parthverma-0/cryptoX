@@ -47,6 +47,11 @@ User sends "hello"
 
 ## Architecture
 
+<img width="1600" height="926" alt="Image" src="https://github.com/user-attachments/assets/734b2633-30ab-4bc1-9978-7abc42e2a5ba" />
+
+<img width="898" height="908" alt="Image" src="https://github.com/user-attachments/assets/d34b3fba-3eeb-4bb8-b179-3ffd7de1df43" />
+
+<img width="1053" height="925" alt="Image" src="https://github.com/user-attachments/assets/0326f95e-0085-4360-a492-84d11e0c8d46" />
 
 
 
