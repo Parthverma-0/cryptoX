@@ -21,10 +21,10 @@ Built on **Hela Chain** with **HLUSD** as the native currency, CryptoX makes dec
 
 ## How it works
 
-1. **Register** — Send any message to the bot. If you're new, it creates a Hela Chain wallet linked to your phone number instantly.
-2. **Deposit** — The bot gives you your wallet address. Send HLUSD to it from any Hela Chain compatible wallet.
-3. **Send money** — Type a recipient's phone number or wallet address, enter the amount, and the transaction is sent on-chain.
-4. **Check balance** — Hit "Check balance" and the bot fetches your live HLUSD balance directly from the blockchain.
+1. **Register** - Send any message to the bot. If you're new, it creates a Hela Chain wallet linked to your phone number instantly.
+2. **Deposit** - The bot gives you your wallet address. Send HLUSD to it from any Hela Chain compatible wallet.
+3. **Send money** - Type a recipient's phone number or wallet address, enter the amount, and the transaction is sent on-chain.
+4. **Check balance**  Hit "-Check balance" and the bot fetches your live HLUSD balance directly from the blockchain.
 
 All of this happens through natural WhatsApp button interactions — no commands to memorize.
 
@@ -70,9 +70,9 @@ Deployed on Hela Chain testnet:
 `0x1AEd7744a43a464E344C44Cf1A78aBD3d41C40fD`
 
 Functions:
-- `registerUser(phone, name, wallet, encryptedPrivateKey)` — onboards a new user
-- `getUser(phone)` — looks up a user by phone hash
-- `createPaymentRequest(to, amount)` — records a confirmed payment permanently on-chain
+- `registerUser(phone, name, wallet, encryptedPrivateKey)` - onboards a new user
+- `getUser(phone)` - looks up a user by phone hash
+- `createPaymentRequest(to, amount)` - records a confirmed payment permanently on-chain
 
 ---
 
