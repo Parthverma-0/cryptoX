@@ -205,5 +205,5 @@ export async function sendHlusdFromWallet({
 }
 
 export function getHelaScanUrlForAddress(address: string) {
-  return `https://testnet-scanner.helachain.com/address/${address}`
+  return `https://testnet.helascan.io/address/${address}`
 }
